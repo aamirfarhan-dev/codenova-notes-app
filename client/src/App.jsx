@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
 const API = '/api/notes'
@@ -13,6 +14,8 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [formOpen, setFormOpen] = useState(false)
+  const cardRefs = useRef([])
 
   async function loadNotes(query = search) {
     setLoading(true)
@@ -43,10 +46,48 @@ function App() {
     return () => clearTimeout(timer)
   }, [search])
 
+  useEffect(() => {
+    const elements = cardRefs.current.filter(Boolean)
+    if (!elements.length) return
+
+    if (
+      !('IntersectionObserver' in window) ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ) {
+      elements.forEach((element) => element.classList.add('is-visible'))
+      return
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible')
+            observer.unobserve(entry.target)
+          }
+        })
+      },
+      { threshold: 0.12, rootMargin: '0px 0px -25px 0px' },
+    )
+
+    elements.forEach((element) => observer.observe(element))
+    return () => observer.disconnect()
+  }, [notes, loading, search])
+
   function resetForm() {
     setTitle('')
     setContent('')
     setEditingId(null)
+    setFormOpen(false)
+  }
+
+  function startNewNote() {
+    resetForm()
+    setError('')
+    setMessage('')
+    setFormOpen(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setTimeout(() => document.getElementById('title')?.focus(), 250)
   }
 
   async function handleSubmit(event) {
@@ -78,8 +119,8 @@ function App() {
       if (!response.ok) throw new Error(data.error || 'Unable to save note.')
 
       const wasEditing = editingId !== null
-resetForm()
-setMessage(wasEditing ? 'Note updated successfully.' : 'Note created successfully.')
+      resetForm()
+      setMessage(wasEditing ? 'Note updated successfully.' : 'Note created successfully.')
       await loadNotes(search)
     } catch (err) {
       setError(err.message || 'Unable to save note.')
@@ -92,6 +133,7 @@ setMessage(wasEditing ? 'Note updated successfully.' : 'Note created successfull
     setEditingId(note.id)
     setTitle(note.title)
     setContent(note.content)
+    setFormOpen(true)
     setMessage('')
     setError('')
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -116,132 +158,193 @@ setMessage(wasEditing ? 'Note updated successfully.' : 'Note created successfull
     }
   }
 
+  const visibleCount = notes.length
+
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <a className="brand" href="/">
-          <span className="brand-mark">N</span>
-          <span>noted<span className="brand-dot">.</span></span>
+    <div className="app-layout">
+      <aside className="sidebar">
+        <a className="brand" href="#main" aria-label="CodeNova Notes home">
+          <span className="brand-mark">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="3.5" width="14" height="17" rx="3" />
+              <path d="M8.5 8h7M8.5 12h7M8.5 16h4" />
+            </svg>
+          </span>
+          <span className="brand-copy">
+            <strong>CodeNova</strong>
+            <small>Notes workspace</small>
+          </span>
         </a>
-        <span className="status"><span className="status-dot" /> Personal workspace</span>
-      </header>
 
-      <section className="hero">
-        <p className="eyebrow">YOUR SPACE, YOUR THOUGHTS</p>
-        <h1>Make room for<br /><span>good ideas.</span></h1>
-        <p className="hero-copy">
-          Capture what matters. Keep your thoughts organized and easy to find.
-        </p>
-      </section>
+        <p className="sidebar-label">WORKSPACE</p>
+        <button className="nav-item active" type="button" onClick={() => {
+          setSearch('')
+          window.scrollTo({ top: 0, behavior: 'smooth' })
+        }}>
+          <span className="nav-icon">▤</span>
+          <span>All notes</span>
+          <span className="nav-count">{visibleCount}</span>
+        </button>
 
-      <section className="workspace">
-        <form className="note-form" onSubmit={handleSubmit}>
-          <div className="form-heading">
+        <div className="sidebar-divider" />
+
+        <div className="sidebar-tip">
+          <span className="tip-icon">✦</span>
+          <h3>A little space for big ideas.</h3>
+          <p>Capture what matters. Keep moving forward, one thought at a time.</p>
+        </div>
+
+        <div className="sidebar-bottom">
+          <span className="online-dot" />
+          Your workspace is ready
+        </div>
+      </aside>
+
+      <main className="main-panel" id="main">
+        <header className="topbar">
+          <div className="breadcrumb">
+            <span>Workspace</span>
+            <span className="breadcrumb-separator">/</span>
+            <strong>My notes</strong>
+          </div>
+          <button className="button primary top-create" type="button" onClick={startNewNote}>
+            <span aria-hidden="true">＋</span> New note
+          </button>
+        </header>
+
+        <div className="page-content">
+          <section className="page-intro">
             <div>
-              <p className="eyebrow">{editingId === null ? 'NEW NOTE' : 'EDITING NOTE'}</p>
-              <h2>{editingId === null ? 'What’s on your mind?' : 'Update your note'}</h2>
+              <p className="eyebrow">YOUR PERSONAL WORKSPACE</p>
+              <h1>My notes<span className="title-period">.</span></h1>
+              <p className="page-subtitle">A clear mind starts with a place to put your thoughts.</p>
             </div>
-            <span className="form-icon">✎</span>
-          </div>
-
-          <label htmlFor="title">Title</label>
-          <input
-            id="title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Give your note a title..."
-            maxLength={120}
-            required
-          />
-
-          <label htmlFor="content">Your thoughts</label>
-          <textarea
-            id="content"
-            value={content}
-            onChange={(event) => setContent(event.target.value)}
-            placeholder="Start writing here..."
-            rows={5}
-            maxLength={10000}
-            required
-          />
-
-          <div className="form-footer">
-            <span>{content.length} characters</span>
-            <div className="form-actions">
-              {editingId !== null && (
-                <button type="button" className="button secondary" onClick={resetForm}>
-                  Cancel
-                </button>
-              )}
-              <button className="button primary" type="submit" disabled={saving}>
-                {saving ? 'Saving…' : editingId === null ? '+ Save note' : 'Save changes'}
-              </button>
+            <div className="intro-stat">
+              <span className="stat-number">{visibleCount}</span>
+              <span className="stat-label">{visibleCount === 1 ? 'note saved' : 'notes saved'}</span>
             </div>
-          </div>
-        </form>
+          </section>
 
-        {error && <p className="notice error" role="alert">{error}</p>}
-        {message && <p className="notice success" role="status">{message}</p>}
+          {formOpen && (
+            <section className="editor-panel" id="note-editor">
+              <div className="editor-heading">
+                <div className="editor-icon">✎</div>
+                <div>
+                  <p className="eyebrow">{editingId === null ? 'CREATE SOMETHING' : 'MAKE AN UPDATE'}</p>
+                  <h2>{editingId === null ? 'Create a new note' : 'Edit your note'}</h2>
+                </div>
+                <button className="icon-button close-editor" type="button" onClick={resetForm} aria-label="Close editor">×</button>
+              </div>
 
-        <section className="notes-section">
-          <div className="notes-heading">
-            <div>
-              <p className="eyebrow">YOUR COLLECTION</p>
-              <h2>All notes <span className="count">{notes.length}</span></h2>
-            </div>
-            <div className="search-box">
-              <span aria-hidden="true">⌕</span>
-              <input
-                aria-label="Search notes"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="Search your notes..."
-              />
-              {search && (
-                <button type="button" aria-label="Clear search" onClick={() => setSearch('')}>
-                  ×
-                </button>
-              )}
-            </div>
-          </div>
+              <form onSubmit={handleSubmit}>
+                <label htmlFor="title">Title</label>
+                <input
+                  id="title"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Give your note a title"
+                  maxLength={120}
+                  required
+                />
 
-          {loading ? (
-            <div className="empty-state">Loading your notes…</div>
-          ) : notes.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">✎</div>
-              <h3>{search ? 'No matching notes' : 'A fresh page.'}</h3>
-              <p>{search ? 'Try another search term.' : 'Your ideas deserve a place. Create your first note above.'}</p>
-            </div>
-          ) : (
-            <div className="notes-grid">
-              {notes.map((note, index) => (
-                <article className={`note-card card-${index % 3}`} key={note.id}>
-                  <div className="card-top">
-                    <span className="note-label">NOTE {String(note.id).padStart(2, '0')}</span>
-                    <span className="card-pin" aria-hidden="true">✳</span>
+                <label htmlFor="content">Content</label>
+                <textarea
+                  id="content"
+                  value={content}
+                  onChange={(event) => setContent(event.target.value)}
+                  placeholder="Write down what's on your mind..."
+                  rows={5}
+                  maxLength={10000}
+                  required
+                />
+
+                <div className="editor-footer">
+                  <span>{content.length} / 10,000 characters</span>
+                  <div className="form-actions">
+                    <button type="button" className="button secondary" onClick={resetForm}>Cancel</button>
+                    <button className="button primary" type="submit" disabled={saving}>
+                      {saving ? 'Saving…' : editingId === null ? 'Save note →' : 'Save changes →'}
+                    </button>
                   </div>
-                  <h3>{note.title}</h3>
-                  <p className="note-content">{note.content}</p>
-                  <div className="card-footer">
-                    <time>{note.created_at || 'Recently created'}</time>
-                    <div className="card-actions">
-                      <button type="button" onClick={() => startEditing(note)}>Edit</button>
-                      <button type="button" className="delete-action" onClick={() => deleteNote(note.id)}>Delete</button>
-                    </div>
-                  </div>
-                </article>
-              ))}
-            </div>
+                </div>
+              </form>
+            </section>
           )}
-        </section>
-      </section>
 
-      <footer className="page-footer">
-        <span>NOTED. — A LITTLE SPACE FOR BIG IDEAS</span>
-        <span>Built with React · Express · SQLite</span>
-      </footer>
-    </main>
+          {error && <p className="notice error" role="alert">{error}</p>}
+          {message && <p className="notice success" role="status">{message}</p>}
+
+          <section className="notes-section" aria-labelledby="notes-title">
+            <div className="notes-toolbar">
+              <div>
+                <h2 id="notes-title">All notes <span className="count">{visibleCount}</span></h2>
+                <p className="section-subtitle">{search ? 'Search results from your collection' : 'Everything you have captured, in one place.'}</p>
+              </div>
+              <label className="search-box">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="10.8" cy="10.8" r="6.8" />
+                  <path d="m16 16 4.2 4.2" />
+                </svg>
+                <input
+                  aria-label="Search notes"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder="Search your notes..."
+                />
+                {search && (
+                  <button type="button" aria-label="Clear search" onClick={() => setSearch('')}>×</button>
+                )}
+              </label>
+            </div>
+
+            {loading ? (
+              <div className="loading-grid" aria-label="Loading notes">
+                {[1, 2, 3].map((item) => <div className="skeleton-card" key={item} />)}
+              </div>
+            ) : notes.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">✎</div>
+                <h3>{search ? 'No matching notes' : 'Your first note starts here.'}</h3>
+                <p>{search ? 'Try another search term.' : 'Save an idea, a reminder, or something you want to remember.'}</p>
+                {!search && (
+                  <button className="button primary" type="button" onClick={startNewNote}>＋ Create your first note</button>
+                )}
+              </div>
+            ) : (
+              <div className="notes-grid">
+                {notes.map((note, index) => (
+                  <article
+                    className={`note-card note-tone-${index % 4}`}
+                    key={note.id}
+                    ref={(element) => { cardRefs.current[index] = element }}
+                    style={{ '--reveal-delay': `${(index % 3) * 75}ms` }}
+                  >
+                    <div className="card-top">
+                      <span className="note-symbol" aria-hidden="true">{['✎', '✦', '◇', '○'][index % 4]}</span>
+                      <span className="note-label">NOTE {String(note.id).padStart(2, '0')}</span>
+                    </div>
+                    <h3>{note.title}</h3>
+                    <p className="note-content">{note.content}</p>
+                    <div className="card-footer">
+                      <time>{note.created_at || 'Recently created'}</time>
+                      <div className="card-actions">
+                        <button type="button" onClick={() => startEditing(note)}>Edit</button>
+                        <button type="button" className="delete-action" onClick={() => deleteNote(note.id)}>Delete</button>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <footer className="page-footer">
+            <span>Made for your next big idea.</span>
+            <span>React · Express · SQLite</span>
+          </footer>
+        </div>
+      </main>
+    </div>
   )
 }
 

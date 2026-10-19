@@ -1,7 +1,8 @@
+
 :root {
   font-family: 'DM Sans', sans-serif;
-  color: #24271f;
-  background: #faf9f5;
+  color: #17233f;
+  background: #f8faff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -12,22 +13,43 @@
   box-sizing: border-box;
 }
 
+html {
+  min-width: 320px;
+  min-height: 100%;
+  scroll-behavior: smooth;
+  scroll-padding-top: 85px;
+}
+
 body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
 }
 
+body,
 button,
 input,
 textarea {
-  font: inherit;
+  font-family: 'DM Sans', sans-serif;
 }
 
-button:focus-visible,
-a:focus-visible,
-input:focus-visible,
-textarea:focus-visible {
-  outline: 2px solid #526747;
-  outline-offset: 3px;
+button,
+input,
+textarea {
+  font-size: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  color: #173d9b;
+  background: #dce7ff;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
 }
