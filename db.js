@@ -1,15 +1,11 @@
-const Database = require("better-sqlite3");
 
-const db = new Database("notes.db");
+const { Pool } = require("pg");
 
-db.exec(`
-    CREATE TABLE IF NOT EXISTS notes (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-`);
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL
+        ? { rejectUnauthorized: false }
+        : false,
+});
 
-console.log("SQLite database ready!");
-db.close();
+module.exports = pool;

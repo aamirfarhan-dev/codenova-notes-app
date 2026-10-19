@@ -1,118 +1,138 @@
+require("dotenv").config();
+
 const express = require("express");
-const Database = require("better-sqlite3");
+const db = require("./db");
 
 const app = express();
-const db = new Database("notes.db");
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// CREATE a note
-app.post("/api/notes", (req, res) => {
-    const { title, content } = req.body;
-
-    if (
-        typeof title !== "string" ||
-        typeof content !== "string" ||
-        !title.trim() ||
-        !content.trim()
-    ) {
-        return res.status(400).json({
-            error: "Title and content are required."
-        });
-    }
-
-    const result = db.prepare(`
-        INSERT INTO notes (title, content)
-        VALUES (?, ?)
-    `).run(title.trim(), content.trim());
-
-    const note = db.prepare(`
-        SELECT * FROM notes WHERE id = ?
-    `).get(result.lastInsertRowid);
-
-    res.status(201).json(note);
+// Health check
+app.get("/", (req, res) => {
+    res.json({ message: "CodeNova Notes API is running." });
 });
 
-// READ all notes, or SEARCH by title/content
-app.get("/api/notes", (req, res) => {
-    const search = req.query.search;
+// CREATE a note
+app.post("/api/notes", async (req, res, next) => {
+    try {
+        const { title, content } = req.body;
 
-    let notes;
+        if (
+            typeof title !== "string" ||
+            typeof content !== "string" ||
+            !title.trim() ||
+            !content.trim()
+        ) {
+            return res.status(400).json({
+                error: "Title and content are required."
+            });
+        }
 
-    if (typeof search === "string" && search.trim()) {
-        notes = db.prepare(`
-            SELECT * FROM notes
-            WHERE title LIKE ? OR content LIKE ?
-            ORDER BY id DESC
-        `).all(`%${search.trim()}%`, `%${search.trim()}%`);
-    } else {
-        notes = db.prepare(`
-            SELECT * FROM notes
-            ORDER BY id DESC
-        `).all();
+        const result = await db.query(
+            `INSERT INTO notes (title, content)
+             VALUES ($1, $2)
+             RETURNING *`,
+            [title.trim(), content.trim()]
+        );
+
+        res.status(201).json(result.rows[0]);
+    } catch (err) {
+        next(err);
     }
+});
 
-    res.json(notes);
+// READ all notes or SEARCH by title/content
+app.get("/api/notes", async (req, res, next) => {
+    try {
+        const search = req.query.search;
+        let result;
+
+        if (typeof search === "string" && search.trim()) {
+            const term = `%${search.trim()}%`;
+
+            result = await db.query(
+                `SELECT * FROM notes
+                 WHERE title ILIKE $1 OR content ILIKE $1
+                 ORDER BY id DESC`,
+                [term]
+            );
+        } else {
+            result = await db.query(
+                "SELECT * FROM notes ORDER BY id DESC"
+            );
+        }
+
+        res.json(result.rows);
+    } catch (err) {
+        next(err);
+    }
 });
 
 // UPDATE a note
-app.put("/api/notes/:id", (req, res) => {
-    const id = Number(req.params.id);
-    const { title, content } = req.body;
+app.put("/api/notes/:id", async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
+        const { title, content } = req.body;
 
-    if (!Number.isSafeInteger(id) || id <= 0) {
-        return res.status(400).json({ error: "Invalid note ID." });
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            return res.status(400).json({ error: "Invalid note ID." });
+        }
+
+        if (
+            typeof title !== "string" ||
+            typeof content !== "string" ||
+            !title.trim() ||
+            !content.trim()
+        ) {
+            return res.status(400).json({
+                error: "Title and content are required."
+            });
+        }
+
+        const result = await db.query(
+            `UPDATE notes
+             SET title = $1, content = $2
+             WHERE id = $3
+             RETURNING *`,
+            [title.trim(), content.trim(), id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Note not found." });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        next(err);
     }
-
-    if (
-        typeof title !== "string" ||
-        typeof content !== "string" ||
-        !title.trim() ||
-        !content.trim()
-    ) {
-        return res.status(400).json({
-            error: "Title and content are required."
-        });
-    }
-
-    const result = db.prepare(`
-        UPDATE notes
-        SET title = ?, content = ?
-        WHERE id = ?
-    `).run(title.trim(), content.trim(), id);
-
-    if (result.changes === 0) {
-        return res.status(404).json({ error: "Note not found." });
-    }
-
-    const note = db.prepare(`
-        SELECT * FROM notes WHERE id = ?
-    `).get(id);
-
-    res.json(note);
 });
 
 // DELETE a note
-app.delete("/api/notes/:id", (req, res) => {
-    const id = Number(req.params.id);
+app.delete("/api/notes/:id", async (req, res, next) => {
+    try {
+        const id = Number(req.params.id);
 
-    if (!Number.isSafeInteger(id) || id <= 0) {
-        return res.status(400).json({ error: "Invalid note ID." });
+        if (!Number.isSafeInteger(id) || id <= 0) {
+            return res.status(400).json({ error: "Invalid note ID." });
+        }
+
+        const result = await db.query(
+            "DELETE FROM notes WHERE id = $1 RETURNING id",
+            [id]
+        );
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ error: "Note not found." });
+        }
+
+        res.json({ message: "Note deleted successfully." });
+    } catch (err) {
+        next(err);
     }
-
-    const result = db.prepare(`
-        DELETE FROM notes WHERE id = ?
-    `).run(id);
-
-    if (result.changes === 0) {
-        return res.status(404).json({ error: "Note not found." });
-    }
-
-    res.json({ message: "Note deleted successfully." });
 });
 
-// Handle invalid JSON and other unexpected errors
+// Handle invalid JSON and unexpected errors
 app.use((err, req, res, next) => {
     if (err instanceof SyntaxError && err.status === 400 && "body" in err) {
         return res.status(400).json({ error: "Invalid JSON body." });
@@ -123,5 +143,5 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Notes API running at http://localhost:${PORT}`);
+    console.log(`Notes API listening on port ${PORT}`);
 });

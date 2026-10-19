@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import './App.css'
 
-const API = '/api/notes'
+const API = `${import.meta.env.VITE_API_URL || ''}/api/notes`
 
 function App() {
   const [notes, setNotes] = useState([])
